@@ -1,0 +1,42 @@
+ 
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlockSuite编辑器演示</title>
+</head>
+<body>
+    <div id="editor-container"></div>
+    
+    <script src="bseditor.js"></script>
+    <script>
+        // 基础使用
+        const editor = createBlocksuiteEditor('#editor-container', {
+            title: '我的第一个文档',
+            onChange: (content) => {
+                console.log('内容变化:', content);
+            }
+        });
+
+        // 高级使用示例
+        setTimeout(() => {
+            // 加载预设内容
+            editor.loadContent({
+                title: '欢迎使用BlockSuite编辑器',
+                blocks: [
+                    { type: 'heading', content: { level: 1, content: '欢迎使用' } },
+                    { type: 'paragraph', content: '这是一个功能丰富的块级编辑器' },
+                    { type: 'table', content: { rows: 2, cols: 2, data: [['A', 'B'], ['C', 'D']] } }
+                ]
+            });
+        }, 1000);
+
+        // 添加新块
+        function addExample() {
+            editor.createBlock('quote', '这是一个引用块');
+        }
+    </script>
+</body>
+</html>
