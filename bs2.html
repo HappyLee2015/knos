@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>增强版 BlockSuite 编辑器</title>
+    <style>
+        :root {
+            --primary-color: #007acc;
+            --hover-color: #e3f2fd;
+            --border-color: #e0e0e0;
+            --text-color: #333;
+            --light-gray: #f5f5f5;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--light-gray);
+            color: var(--text-color);
+        }
+
+        .editor-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .editor-header {
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .editor-title {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .collaboration-indicators {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .editor-toolbar {
+            padding: 12px 24px;
+            background: #fafafa;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 2px;
+            align-items: center;
+            border-right: 1px solid var(--border-color);
+            padding-right: 8px;
+            margin-right: 8px;
+        }
+
+        .toolbar-group:last-child {
+            border-right: none;
+            margin-right: 0;
+            padding-right: 0;
+        }
+
+        .toolbar-btn {
+            padding: 8px 12px;
+            border: 1px solid transparent;
+            background: transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .toolbar-btn:hover {
+            background: var(--hover-color);
+            border-color: var(--border-color);
+        }
+
+        .toolbar-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .toolbar-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .editor-content {
+            padding: 24px;
+            min-height: 500px;
+            outline: none;
+            position: relative;
+        }
+
+        .block {
+            margin: 4px 0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            position: relative;
+            border: 2px solid transparent;
+        }
+
+        .block:hover {
+            background-color: var(--hover-color);
+            border-color: rgba(0,122,204,0.2);
+        }
+
+        .block.selected {
+            background-color: var(--hover-color);
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 8px rgba(0,122,204,0.1);
+        }
+
+        .block.dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+        }
+
+        .block-handle {
+            position: absolute;
+            left: -30px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            cursor: grab;
+            opacity: 0;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .block:hover .block-handle {
+            opacity: 0.6;
+        }
+
+        .block-handle:active {
+            cursor: grabbing;
+        }
+
+        .text-block {
+            font-size: 16px;
+            line-height: 1.6;
+            min-height: 24px;
+        }
+
+        .heading-1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin: 16px 0 8px 0;
+            color: #1a1a1a;
+        }
+
+        .heading-2 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 12px 0 6px 0;
+            color: #333;
+        }
+
+        .heading-3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 8px 0 4px 0;
+            color: #444;
+        }
+
+        .bullet-list {
+            margin-left: 24px;
+            position: relative;
+        }
+
+        .bullet-list::before {
+            content: "";
+            position: absolute;
+            left: -16px;
+            top: 12px;
+            width: 6px;
+            height: 6px;
+            background: var(--primary-color);
+            border-radius: 50%;
+        }
+
+        .numbered-list {
+            margin-left: 24px;
+            position: relative;
+            counter-increment: list-counter;
+        }
+
+        .numbered-list::before {
+            content: counter(list-counter) ".";
+            position: absolute;
+            left: -20px;
+            top: 8px;
+            font-weight: 600;
+            color: var(--primary-color);
+            font-size: 14px;
+        }
+
+        .editor-content {
+            counter-reset: list-counter;
+        }
+
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: attr(data-language);
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+
+        .code-content {
+            padding: 16px;
+            margin-top: 20px;
+        }
+
+        .quote-block {
+            border-left: 4px solid var(--primary-color);
+            padding: 12px 16px;
+            background: #f8f9fa;
+            font-style: italic;
+            color: #495057;
+        }
+
+        .divider-block {
+            height: 1px;
+            background: linear-gradient(to right, transparent, var(--border-color), transparent);
+            margin: 16px 0;
+        }
+
+        .placeholder {
+            color: #999;
+            font-style: italic;
+        }
+
+        .status-bar {
+            padding: 12px 24px;
+            background: #fafafa;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .status-left {
+            display: flex;
+            gap: 16px;
+        }
+
+        .status-right {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .sync-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .format-menu {
+            position: absolute;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 8px;
+            display: none;
+            z-index: 1000;
+        }
+
+        .format-menu-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .format-menu-item:hover {
+            background: var(--hover-color);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .editor-container {
+                margin: 10px;
+                border-radius: 8px;
+            }
+            
+            .editor-toolbar {
+                padding: 8px 16px;
+            }
+            
+            .toolbar-btn {
+                padding: 6px 8px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-container">
+        <div class="editor-header">
+            <div class="editor-title">增强版 BlockSuite 编辑器</div>
+            <div class="collaboration-indicators">
+                <div class="user-avatar" title="张三正在编辑">张</div>
+                <div class="user-avatar" title="李四正在查看">李</div>
+                <div class="user-avatar" title="王五正在查看">王</div>
+            </div>
+        </div>
+
+        <div class="editor-toolbar">
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="formatBlock('paragraph')" title="段落">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5h18v2H3V5zm0 4h12v2H3V9zm0 4h18v2H3v-2zm0 4h12v2H3v-2z"/></svg>
+                    文本
+                </button>
+                <button class="toolbar-btn" onclick="formatBlock('heading-1')" title="标题1">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+                    H1
+                </button>
+                <button class="toolbar-btn" onclick="formatBlock('heading-2')" title="标题2">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+                    H2
+                </button>
+                <button class="toolbar-btn" onclick="formatBlock('heading-3')" title="标题3">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+                    H3
+                </button>
+            </div>
+            
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="formatBlock('bullet-list')" title="无序列表">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h2v2H4zm0 5h2v2H4zm0 5h2v2H4zm4-10h14v2H8zm0 5h14v2H8zm0 5h14v2H8z"/></svg>
+                </button>
+                <button class="toolbar-btn" onclick="formatBlock('numbered-list')" title="有序列表">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z"/></svg>
+                </button>
+                <button class="toolbar-btn" onclick="formatBlock('quote')" title="引用">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>
+                </button>
+            </div>
+            
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="formatBlock('code')" title="代码块">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+                </button>
+                <button class="toolbar-btn" onclick="insertDivider()" title="分割线">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 7h2v2H3zm4 0h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2z"/></svg>
+                </button>
+            </div>
+            
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="undo()" title="撤销">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+                </button>
+                <button class="toolbar-btn" onclick="redo()" title="重做">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>
+                </button>
+                
+            </div>
+                        <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="exportContent()" title="导出JSON">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                    </svg>
+                    导出
+                </button>
+            </div>
+        </div>
+
+        <div class="editor-content" id="editor">
+            <div class="block text-block" data-type="paragraph">
+                <div class="block-handle">⋮⋮</div>
+                欢迎使用增强版 BlockSuite 编辑器！这个版本包含了更多高级功能。
+            </div>
+            
+            <div class="block heading-1" data-type="heading-1">
+                <div class="block-handle">⋮⋮</div>
+                新功能介绍
+            </div>
+            
+            <div class="block bullet-list" data-type="bullet-list">
+                <div class="block-handle">⋮⋮</div>
+                拖拽排序：通过拖拽左侧手柄重新排序块
+            </div>
+            
+            <div class="block bullet-list" data-type="bullet-list">
+                <div class="block-handle">⋮⋮</div>
+                更多块类型：支持引用、分割线等
+            </div>
+            
+            <div class="block numbered-list" data-type="numbered-list">
+                <div class="block-handle">⋮⋮</div>
+                实时协作：显示其他用户的编辑状态
+            </div>
+            
+            <div class="block quote-block" data-type="quote">
+                <div class="block-handle">⋮⋮</div>
+                "这是一个现代化的块级编辑器，灵感来自 BlockSuite"
+            </div>
+            
+            <div class="block code-block" data-type="code" data-language="javascript">
+                <div class="block-handle">⋮⋮</div>
+                <div class="code-content">
+// 示例代码块
+class EnhancedEditor {
+    constructor() {
+        this.blocks = [];
+        this.history = [];
+        console.log('编辑器已初始化');
+    }
+}
+                </div>
+            </div>
+            
+            <div class="block divider-block" data-type="divider"></div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-left">
+                <span>块数: <span id="block-count">8</span></span>
+                <span>字数: <span id="word-count">124</span></span>
+                <span>字符: <span id="char-count">156</span></span>
+            </div>
+            <div class="status-right">
+                <div class="sync-indicator">
+                    <div class="sync-dot"></div>
+                    <span>已同步</span>
+                </div>
+                <span id="last-saved">最后保存: 刚刚</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="format-menu" id="formatMenu">
+        <div class="format-menu-item" onclick="formatBlock('paragraph')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5h18v2H3V5zm0 4h12v2H3V9zm0 4h18v2H3v-2zm0 4h12v2H3v-2z"/></svg>
+            段落
+        </div>
+        <div class="format-menu-item" onclick="formatBlock('heading-1')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+            标题 1
+        </div>
+        <div class="format-menu-item" onclick="formatBlock('heading-2')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+            标题 2
+        </div>
+        <div class="format-menu-item" onclick="formatBlock('heading-3')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+            标题 3
+        </div>
+    </div>
+
+    <script>
+        // 增强版 BlockSuite 编辑器
+        class EnhancedBlockSuite {
+            constructor(container) {
+                this.container = container;
+                this.blocks = [];
+                this.history = [];
+                this.historyIndex = -1;
+                this.draggedElement = null;
+                this.init();
+            }
+
+            init() {
+                this.container.addEventListener('keydown', this.handleKeydown.bind(this));
+                this.container.addEventListener('click', this.handleClick.bind(this));
+                this.container.addEventListener('input', this.handleInput.bind(this));
+                this.container.addEventListener('dragover', this.handleDragOver.bind(this));
+                this.container.addEventListener('drop', this.handleDrop.bind(this));
+                
+                this.setupDragAndDrop();
+                this.saveState();
+                this.updateStats();
+            }
+
+            setupDragAndDrop() {
+                const handles = document.querySelectorAll('.block-handle');
+                handles.forEach(handle => {
+                    handle.addEventListener('mousedown', this.startDrag.bind(this));
+                });
+            }
+
+            startDrag(e) {
+                const block = e.target.closest('.block');
+                this.draggedElement = block;
+                block.setAttribute('draggable', true);
+                
+                block.addEventListener('dragend', () => {
+                    block.removeAttribute('draggable');
+                    block.classList.remove('dragging');
+                });
+                
+                block.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.effectAllowed = 'move';
+                    block.classList.add('dragging');
+                });
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                if (!this.draggedElement) return;
+
+                const targetBlock = e.target.closest('.block');
+                if (targetBlock && targetBlock !== this.draggedElement) {
+                    const rect = targetBlock.getBoundingClientRect();
+                    const isAfter = e.clientY > rect.top + rect.height / 2;
+                    
+                    if (isAfter) {
+                        targetBlock.parentNode.insertBefore(this.draggedElement, targetBlock.nextSibling);
+                    } else {
+                        targetBlock.parentNode.insertBefore(this.draggedElement, targetBlock);
+                    }
+                    
+                    this.saveState();
+                    this.updateStats();
+                }
+            }
+
+            handleKeydown(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.insertNewBlock();
+                } else if (e.key === 'Backspace' && window.getSelection().toString() === '') {
+                    const block = this.getCurrentBlock();
+                    if (block && block.textContent.trim() === '') {
+                        e.preventDefault();
+                        this.deleteBlock(block);
+                    }
+                } else if (e.ctrlKey || e.metaKey) {
+                    switch(e.key) {
+                        case 'z':
+                            e.preventDefault();
+                            if (e.shiftKey) this.redo();
+                            else this.undo();
+                            break;
+                        case 'y':
+                            e.preventDefault();
+                            this.redo();
+                            break;
+                    }
+                }
+            }
+
+            handleClick(e) {
+                const block = e.target.closest('.block');
+                if (block) {
+                    this.selectBlock(block);
+                }
+            }
+
+            handleInput(e) {
+                this.updateStats();
+                this.updateLastSaved();
+            }
+
+            getCurrentBlock() {
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    return range.commonAncestorContainer.closest('.block');
+                }
+                return null;
+            }
+
+            selectBlock(block) {
+                document.querySelectorAll('.block').forEach(b => b.classList.remove('selected'));
+                block.classList.add('selected');
+                this.selectedBlock = block;
+            }
+
+            insertNewBlock(type = 'paragraph') {
+                const newBlock = this.createBlock(type);
+                const currentBlock = this.getCurrentBlock();
+                
+                if (currentBlock) {
+                    currentBlock.parentNode.insertBefore(newBlock, currentBlock.nextSibling);
+                } else {
+                    this.container.appendChild(newBlock);
+                }
+                
+                this.selectBlock(newBlock);
+                this.setCursor(newBlock);
+                this.saveState();
+                this.updateStats();
+            }
+
+            createBlock(type, content = '') {
+                const block = document.createElement('div');
+                block.className = `block ${this.getBlockClass(type)}`;
+                block.setAttribute('data-type', type);
+                block.innerHTML = `
+                    <div class="block-handle" title="拖拽排序">⋮⋮</div>
+                    ${this.getBlockContent(type, content)}
+                `;
+                
+                const handle = block.querySelector('.block-handle');
+                handle.addEventListener('mousedown', this.startDrag.bind(this));
+                
+                return block;
+            }
+
+            getBlockClass(type) {
+                const classMap = {
+                    'paragraph': 'text-block',
+                    'heading-1': 'heading-1',
+                    'heading-2': 'heading-2',
+                    'heading-3': 'heading-3',
+                    'bullet-list': 'bullet-list',
+                    'numbered-list': 'numbered-list',
+                    'quote': 'quote-block',
+                    'code': 'code-block',
+                    'divider': 'divider-block'
+                };
+                return classMap[type] || 'text-block';
+            }
+
+            getBlockContent(type, content) {
+                const contentMap = {
+                    'code': `<div class="code-content">${content || '// 输入代码...'}</div>`,
+                    'quote': content || '输入引用内容...',
+                    'divider': '',
+                    'numbered-list': content || '列表项',
+                    'bullet-list': content || '列表项',
+                    default: content || '输入文本...'
+                };
+                return contentMap[type] || contentMap.default;
+            }
+
+            deleteBlock(block) {
+                if (document.querySelectorAll('.block').length > 1) {
+                    const prev = block.previousElementSibling || block.nextElementSibling;
+                    block.remove();
+                    if (prev) {
+                        this.selectBlock(prev);
+                        this.setCursor(prev);
+                    }
+                    this.saveState();
+                    this.updateStats();
+                }
+            }
+
+            formatBlock(type) {
+                const block = this.selectedBlock || this.getCurrentBlock();
+                if (block) {
+                    const oldType = block.getAttribute('data-type');
+                    const content = this.getBlockText(block);
+                    
+                    block.className = `block ${this.getBlockClass(type)}`;
+                    block.setAttribute('data-type', type);
+                    block.innerHTML = `
+                        <div class="block-handle" title="拖拽排序">⋮⋮</div>
+                        ${this.getBlockContent(type, content)}
+                    `;
+                    
+                    const handle = block.querySelector('.block-handle');
+                    handle.addEventListener('mousedown', this.startDrag.bind(this));
+                    
+                    this.selectBlock(block);
+                    this.saveState();
+                    this.updateStats();
+                }
+            }
+
+            getBlockText(block) {
+                const textContent = block.textContent.replace('⋮⋮', '').trim();
+                return textContent;
+            }
+
+            insertDivider() {
+                this.insertNewBlock('divider');
+            }
+
+            saveState() {
+                const state = Array.from(document.querySelectorAll('.block')).map(block => ({
+                    type: block.getAttribute('data-type'),
+                    content: this.getBlockText(block)
+                }));
+                
+                this.history = this.history.slice(0, this.historyIndex + 1);
+                this.history.push(state);
+                this.historyIndex++;
+                
+                if (this.history.length > 50) {
+                    this.history.shift();
+                    this.historyIndex--;
+                }
+            }
+
+            undo() {
+                if (this.historyIndex > 0) {
+                    this.historyIndex--;
+                    this.restoreState(this.history[this.historyIndex]);
+                }
+            }
+
+            redo() {
+                if (this.historyIndex < this.history.length - 1) {
+                    this.historyIndex++;
+                    this.restoreState(this.history[this.historyIndex]);
+                }
+            }
+
+            restoreState(state) {
+                this.container.innerHTML = '';
+                state.forEach(item => {
+                    const block = this.createBlock(item.type, item.content);
+                    this.container.appendChild(block);
+                });
+                this.updateStats();
+            }
+
+            setCursor(element) {
+                const textNode = element.querySelector('.text-block, .heading-1, .heading-2, .heading-3, .bullet-list, .numbered-list, .quote-block') || element;
+                const range = document.createRange();
+                const selection = window.getSelection();
+                
+                if (textNode.firstChild) {
+                    range.selectNodeContents(textNode);
+                } else {
+                    range.selectNodeContents(textNode);
+                }
+                range.collapse(false);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+
+            updateStats() {
+                const blocks = document.querySelectorAll('.block');
+                const text = Array.from(blocks).reduce((text, block) => {
+                    return text + ' ' + this.getBlockText(block);
+                }, '');
+                
+                const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+                const chars = text.length;
+                
+                document.getElementById('block-count').textContent = blocks.length;
+                document.getElementById('word-count').textContent = words;
+                document.getElementById('char-count').textContent = chars;
+            }
+
+            updateLastSaved() {
+                document.getElementById('last-saved').textContent = '最后保存: 刚刚';
+            }
+
+            exportContent() {
+                const content = {
+                    title: '增强版 BlockSuite 文档',
+                    created: new Date().toISOString(),
+                    blocks: Array.from(document.querySelectorAll('.block')).map(block => ({
+                        type: block.getAttribute('data-type'),
+                        content: this.getBlockText(block)
+                    }))
+                };
+                
+                const blob = new Blob([JSON.stringify(content, null, 2)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `blocksuite-enhanced-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        // 全局函数
+        let editor;
+
+        function formatBlock(type) {
+            editor.formatBlock(type);
+        }
+
+        function insertDivider() {
+            editor.insertDivider();
+        }
+
+        function undo() {
+            editor.undo();
+        }
+
+        function redo() {
+            editor.redo();
+        }
+
+        function showFormatMenu(e) {
+            const menu = document.getElementById('formatMenu');
+            menu.style.display = 'block';
+            menu.style.left = e.pageX + 'px';
+            menu.style.top = e.pageY + 'px';
+        }
+
+        function hideFormatMenu() {
+            document.getElementById('formatMenu').style.display = 'none';
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            editor = new EnhancedBlockSuite(document.getElementById('editor'));
+            console.log('增强版 BlockSuite 编辑器已初始化！');
+            console.log('快捷键：Ctrl+Z 撤销, Ctrl+Y 重做, Enter 新建块');
+        });
+
+        // 点击其他地方隐藏格式菜单
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.format-menu')) {
+                hideFormatMenu();
+            }
+        });
+    </script>
+</body>
+</html>
