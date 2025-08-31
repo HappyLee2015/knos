@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drawflow + BlockSuite 拖拽协调版</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.js"></script>
+    <script src="bseditor.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .toolbar {
+            background: white;
+            padding: 10px 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .toolbar button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #667eea;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .toolbar button:hover {
+            background: #5a6fd8;
+        }
+
+        #drawflow {
+            width: 100%;
+            height: calc(100vh - 120px);
+            background: #f5f7fa;
+            background-image: 
+                radial-gradient(circle, #ddd 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* 节点样式 - 拖拽协调支持 */
+        .drawflow .node {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 300px;
+            min-height: 100px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .drawflow .node:hover {
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+        }
+
+        .drawflow .node.selected {
+            border-color: #667eea;
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        /* 标题栏 - 唯一可移动区域 */
+        .drawflow .node .title {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+            cursor: move;
+            user-select: none;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* 内容区域 - 智能事件处理 */
+        .drawflow .node .content {
+            padding: 0;
+            overflow-y: auto;
+            cursor: default;
+            user-select: text;
+        }
+
+        /* BlockSuite编辑器容器特殊样式 */
+        .blocksuite-editor-container {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 防止BlockSuite内部拖拽影响节点移动 */
+        .blocksuite-editor-container .block {
+            cursor: default;
+        }
+
+        .blocksuite-editor-container .block-handle {
+            cursor: grab !important;
+        }
+
+        .blocksuite-editor-container .block-handle:active {
+            cursor: grabbing !important;
+        }
+
+        /* 大小调节手柄 */
+        .resize-handle {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            width: 20px;
+            height: 20px;
+            background: #667eea;
+            border-radius: 50%;
+            cursor: se-resize;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1000;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .drawflow .node:hover .resize-handle,
+        .drawflow .node.selected .resize-handle {
+            opacity: 1;
+        }
+
+        .resize-handle:hover {
+            background: #5a6fd8;
+            transform: scale(1.1);
+        }
+
+        .node-resizing {
+            border-color: #667eea !important;
+            box-shadow: 0 6px 25px rgba(102, 126, 234, 0.4) !important;
+        }
+
+        /* 事件拦截层 */
+        .event-interceptor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .event-interceptor.active {
+            pointer-events: all;
+        }
+
+        /* 帮助提示 */
+        .help-tooltip {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            max-width: 250px;
+        }
+
+        .help-tooltip.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-header">
+        <h1>Drawflow + BlockSuite 拖拽协调版</h1>
+        <p>节点标题栏可移动，BlockSuite内部块可拖拽重排</p>
+    </div>
+
+    <div class="toolbar">
+        <button onclick="addNote()">📝 添加笔记</button>
+        <button onclick="addTodo()">✅ 添加待办</button>
+        <button onclick="addTable()">📊 添加表格</button>
+        <button onclick="addBlocksuite()">📋 BlockSuite编辑器</button>
+        <button onclick="saveData()">💾 保存</button>
+        <button onclick="loadData()">📁 加载</button>
+        <button onclick="toggleHelp()">❓ 帮助</button>
+    </div>
+
+    <div id="drawflow"></div>
+
+    <!-- 节点模板 -->
+    <template id="note-template">
+        <div>
+            <div class="title">📝 笔记</div>
+            <div class="content content-no-move">
+                <textarea placeholder="双击编辑笔记内容..." 
+                          style="width: 100%; min-height: 100px; border: none; padding: 15px; resize: none; outline: none;"></textarea>
+            </div>
+            <div class="resize-handle"></div>
+        </div>
+    </template>
+
+    <template id="todo-template">
+        <div>
+            <div class="title">✅ 待办清单</div>
+            <div class="content content-no-move">
+                <div class="todo-container" style="padding: 15px;">
+                    <div class="todo-list"></div>
+                    <button onclick="addTodoItem(this)" style="margin-top: 10px; padding: 5px 10px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">+ 添加待办</button>
+                </div>
+            </div>
+            <div class="resize-handle"></div>
+        </div>
+    </template>
+
+    <template id="table-template">
+        <div>
+            <div class="title">📊 表格</div>
+            <div class="content content-no-move">
+                <div class="table-container" style="padding: 15px;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tbody></tbody>
+                    </table>
+                    <div style="margin-top: 10px;">
+                        <button onclick="addTableRow(this)" style="margin-right: 10px; padding: 5px 10px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">+ 行</button>
+                        <button onclick="addTableColumn(this)" style="padding: 5px 10px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">+ 列</button>
+                    </div>
+                </div>
+            </div>
+            <div class="resize-handle"></div>
+        </div>
+    </template>
+
+    <!-- <template id="blocksuite-template">
+        <div>
+            <div class="title">📋 BlockSuite编辑器</div>
+            <div class="content content-no-move blocksuite-editor-container">
+                <div class="blocksuite-editor-wrapper"></div>
+            </div>
+            <div class="resize-handle"></div>
+        </div>
+    </template> -->
+<!-- 
+     <div class="title" contenteditable="true">📋 BlockSuite编辑器</div> -->
+    <template id="blocksuite-template">
+    <div>
+       
+        <div class="content content-no-move blocksuite-editor-container">
+            <div class="blocksuite-editor-wrapper">
+                <div class="blocksuite-editor">
+                    <div class="editor-container">
+                        <div class="editor-header">
+                            <div class="editor-title" contenteditable="true">无标题文档</div>
+                            <div class="editor-toolbar">
+                                <button class="toolbar-btn" data-action="heading">标题</button>
+                                <button class="toolbar-btn" data-action="list">列表</button>
+                                <button class="toolbar-btn" data-action="quote">引用</button>
+                                <button class="toolbar-btn" data-action="code">代码</button>
+                                <button class="toolbar-btn" data-action="table">表格</button>
+                                <button class="toolbar-btn" data-action="kanban">看板</button>
+                                <button class="toolbar-btn" data-action="divider">分割线</button>
+                                <button class="toolbar-btn" data-action="undo">撤销</button>
+                                <button class="toolbar-btn" data-action="redo">重做</button>
+                                <button class="toolbar-btn" data-action="export">导出</button>
+                            </div>
+                        </div>
+                        <div class="editor-content"></div>
+                        <div class="editor-stats">
+                            <span>块数: <span class="block-count">0</span></span>
+                            <span>字数: <span class="word-count">0</span></span>
+                            <span>字符: <span class="char-count">0</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="resize-handle"></div>
+    </div>
+</template>
+
+    <!-- 帮助提示 -->
+    <div class="help-tooltip" id="help-tooltip">
+        <strong>使用提示：</strong><br>
+        • 节点标题栏可拖拽移动整个节点<br>
+        • BlockSuite编辑器内块可通过左侧手柄拖拽重排<br>
+        • 双击节点标题可自动调整大小<br>
+        • 右下角圆点可手动调节节点大小
+    </div>
+
+    <script>
+        // 初始化Drawflow
+        const editor = new Drawflow(document.getElementById("drawflow"));
+        editor.reroute = true;
+        editor.reroute_fix_curvature = true;
+        editor.force_first_input = false;
+        editor.draggable_inputs = false;
+
+        // 重写事件处理系统 - 协调BlockSuite和Drawflow
+        const originalStart = editor.start.bind(editor);
+        editor.start = function() {
+            originalStart();
+            setupDragCoordination();
+        };
+
+        // 设置拖拽协调机制
+        function setupDragCoordination() {
+            const canvas = document.getElementById('drawflow');
+            
+            // 事件拦截器 - 智能识别事件来源
+            let isBlockDragging = false;
+            let blockDragElement = null;
+
+            // 监听BlockSuite内部拖拽开始
+            canvas.addEventListener('dragstart', function(e) {
+                const blockHandle = e.target.closest('.block-handle');
+                if (blockHandle) {
+                    isBlockDragging = true;
+                    blockDragElement = e.target.closest('.block');
+                    e.stopPropagation(); // 阻止事件冒泡到Drawflow
+                }
+            }, true);
+
+            // 监听BlockSuite内部拖拽结束
+            canvas.addEventListener('dragend', function(e) {
+                if (isBlockDragging) {
+                    isBlockDragging = false;
+                    blockDragElement = null;
+                    e.stopPropagation();
+                }
+            }, true);
+
+            // 重写Drawflow的节点选择逻辑
+            const originalNodeSelected = editor.nodeSelected;
+            editor.nodeSelected = function(e) {
+                const target = e.target;
+                
+                // 检查是否在BlockSuite编辑器内
+                const blocksuiteContainer = target.closest('.blocksuite-editor-container');
+                if (blocksuiteContainer) {
+                    // 检查是否是块级拖拽手柄
+                    const blockHandle = target.closest('.block-handle');
+                    if (blockHandle) {
+                        // 允许BlockSuite内部拖拽，不选中节点
+                        return;
+                    }
+                    
+                    // 检查是否是内容区域
+                    const contentArea = target.closest('.content-no-move');
+                    if (contentArea && !target.closest('.title')) {
+                        // 内容区域点击，不选中节点
+                        return;
+                    }
+                }
+                
+                // 检查是否在标题栏区域
+                const titleElement = target.closest('.title');
+                if (titleElement) {
+                    // 标题栏点击，正常选中节点
+                    originalNodeSelected.call(this, e);
+                }
+            };
+
+            // 重写Drawflow的拖拽开始逻辑
+            const originalDragNode = editor.dragNode;
+            editor.dragNode = function(e) {
+                const target = e.target;
+                
+                // 检查是否在BlockSuite编辑器内
+                const blocksuiteContainer = target.closest('.blocksuite-editor-container');
+                if (blocksuiteContainer) {
+                    // 在BlockSuite内，禁止节点移动
+                    this.ele_selected = null;
+                    this.drag = false;
+                    this.editor_selected = false;
+                    return;
+                }
+                
+                // 检查是否在标题栏区域
+                const titleElement = target.closest('.title');
+                if (!titleElement) {
+                    // 不在标题栏，禁止移动
+                    this.ele_selected = null;
+                    this.drag = false;
+                    this.editor_selected = false;
+                    return;
+                }
+                
+                // 在标题栏区域，允许节点移动
+                originalDragNode.call(this, e);
+            };
+
+            // 阻止BlockSuite内部事件冒泡
+            canvas.addEventListener('mousedown', function(e) {
+                const blocksuiteContainer = e.target.closest('.blocksuite-editor-container');
+                if (blocksuiteContainer) {
+                    const blockHandle = e.target.closest('.block-handle');
+                    if (blockHandle) {
+                        // 块级拖拽手柄，阻止冒泡
+                        e.stopPropagation();
+                    } else if (!e.target.closest('.title')) {
+                        // 内容区域，阻止冒泡
+                        e.stopPropagation();
+                    }
+                }
+            }, true);
+
+            // 阻止鼠标移动事件在BlockSuite内触发节点移动
+            canvas.addEventListener('mousemove', function(e) {
+                const blocksuiteContainer = e.target.closest('.blocksuite-editor-container');
+                if (blocksuiteContainer && editor.drag) {
+                    // 如果正在拖拽节点但鼠标在BlockSuite内，检查是否在标题栏
+                    const titleElement = e.target.closest('.title');
+                    if (!titleElement) {
+                        // 不在标题栏，强制停止拖拽
+                        editor.drag = false;
+                        editor.ele_selected = null;
+                    }
+                }
+            });
+        }
+
+        // 注册节点类型
+        function registerNodeTypes() {
+            const noteTemplate = document.getElementById('note-template').content.cloneNode(true);
+            const todoTemplate = document.getElementById('todo-template').content.cloneNode(true);
+            const tableTemplate = document.getElementById('table-template').content.cloneNode(true);
+            const blocksuiteTemplate = document.getElementById('blocksuite-template').content.cloneNode(true);
+
+            editor.registerNode('note', noteTemplate);
+            editor.registerNode('todo', todoTemplate);
+            editor.registerNode('table', tableTemplate);
+            editor.registerNode('blocksuite', blocksuiteTemplate);
+        }
+
+        // 节点创建事件处理
+        editor.on('nodeCreated', function(nodeId) {
+            const node = editor.getNodeFromId(nodeId);
+            
+            setTimeout(() => {
+                initializeNodeSize(nodeId);
+                
+                switch(node.name) {
+                    case 'note':
+                        if (!node.data.content) {
+                            editor.updateNodeDataFromId(nodeId, { content: '双击编辑笔记内容...' });
+                        }
+                        autoResizeTextarea(nodeId);
+                        break;
+                    case 'todo':
+                        if (!node.data.items) {
+                            editor.updateNodeDataFromId(nodeId, { items: [{text: '示例待办', completed: false}] });
+                        }
+                        renderTodoNode(nodeId, node.data.items || []);
+                        autoResizeNode(nodeId);
+                        break;
+                    case 'table':
+                        if (!node.data.data) {
+                            editor.updateNodeDataFromId(nodeId, { data: [['列1', '列2'], ['数据1', '数据2']] });
+                        }
+                        renderTableNode(nodeId, node.data.data || [['']]);
+                        autoResizeNode(nodeId);
+                        break;
+                    case 'blocksuite':
+                        initializeBlocksuiteNode(nodeId);
+                        break;
+                }
+            }, 100);
+        });
+
+        // 初始化节点大小
+        function initializeNodeSize(nodeId) {
+            const nodeElement = document.querySelector(`#node-${nodeId}`);
+            const node = editor.getNodeFromId(nodeId);
+            
+            if (node.data.width && node.data.height) {
+                nodeElement.style.width = node.data.width + 'px';
+                nodeElement.style.height = node.data.height + 'px';
+            }
+
+            // 双击标题自动调整大小
+            const title = nodeElement.querySelector('.title');
+            if (title) {
+                title.addEventListener('dblclick', () => {
+                    autoFitNode(nodeId);
+                });
+            }
+
+            // 初始化大小调节
+            const resizeHandle = nodeElement.querySelector('.resize-handle');
+            if (resizeHandle) {
+                resizeHandle.addEventListener('mousedown', (e) => startResize(e, nodeId));
+            }
+        }
+
+        // 开始调整大小
+        function startResize(e, nodeId) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            let isResizing = true;
+            const currentNode = document.querySelector(`#node-${nodeId}`);
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startWidth = parseInt(document.defaultView.getComputedStyle(currentNode).width, 10);
+            const startHeight = parseInt(document.defaultView.getComputedStyle(currentNode).height, 10);
+            const minWidth = 300;
+            const minHeight = 100;
+            
+            currentNode.classList.add('node-resizing');
+            
+            function doResize(e) {
+                if (!isResizing) return;
+                
+                const newWidth = Math.max(minWidth, startWidth + (e.clientX - startX));
+                const newHeight = Math.max(minHeight, startHeight + (e.clientY - startY));
+                
+                currentNode.style.width = newWidth + 'px';
+                currentNode.style.height = newHeight + 'px';
+                
+                // 更新节点数据
+                editor.updateNodeDataFromId(nodeId, {
+                    width: newWidth,
+                    height: newHeight
+                });
+            }
+            
+            function stopResize() {
+                if (!isResizing) return;
+                
+                isResizing = false;
+                currentNode.classList.remove('node-resizing');
+                
+                document.removeEventListener('mousemove', doResize);
+                document.removeEventListener('mouseup', stopResize);
+            }
+            
+            document.addEventListener('mousemove', doResize);
+            document.addEventListener('mouseup', stopResize);
+        }
+
+        // 初始化BlockSuite节点
+        function initializeBlocksuiteNode(nodeId) {
+            const nodeElement = document.querySelector(`#node-${nodeId}`);
+            const wrapper = nodeElement.querySelector('.blocksuite-editor-wrapper');
+            const node = editor.getNodeFromId(nodeId);
+            
+            const blocksuiteEditor = createBlocksuiteEditor(wrapper,{
+                container: wrapper,
+                title: '',  //BlockSuite文档
+                toolbar:false,
+                onChange: (content) => {
+                    editor.updateNodeDataFromId(nodeId, { blocksuiteContent: content });
+                }
+            });
+            
+            if (node.data.blocksuiteContent) {
+                blocksuiteEditor.loadContent(node.data.blocksuiteContent);
+            }
+            
+            if (node && node.data.blocksuiteContent) {
+                blocksuiteEditor.loadContent(node.data.blocksuiteContent);
+            } else {
+                blocksuiteEditor.createBlock('heading', { level: 3, content: '欢迎使用BlockSuite' });
+                blocksuiteEditor.createBlock('paragraph', '这是一个功能丰富的块级编辑器，支持多种内容类型。');
+            }
+
+            // 绑定工具栏按钮事件
+            const toolbar = nodeElement.querySelector('.editor-toolbar');
+            if (toolbar) {
+                toolbar.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('toolbar-btn')) {
+                        const action = e.target.dataset.action;
+                        switch(action) {
+                            case 'heading':
+                                blocksuiteEditor.createBlock('heading');
+                                break;
+                            case 'list':
+                                blocksuiteEditor.createBlock('list');
+                                break;
+                            case 'quote':
+                                blocksuiteEditor.createBlock('quote');
+                                break;
+                            case 'code':
+                                blocksuiteEditor.createBlock('code');
+                                break;
+                            case 'table':
+                                blocksuiteEditor.createBlock('table');
+                                break;
+                            case 'kanban':
+                                blocksuiteEditor.createBlock('kanban');
+                                break;
+                            case 'divider':
+                                blocksuiteEditor.createBlock('divider');
+                                break;
+                            case 'undo':
+                                blocksuiteEditor.undo();
+                                break;
+                            case 'redo':
+                                blocksuiteEditor.redo();
+                                break;
+                            case 'export':
+                                blocksuiteEditor.export();
+                                break;
+                        }
+                    }
+                });
+            }
+            // 保存编辑器实例
+            nodeElement._blocksuiteEditor = blocksuiteEditor;
+            
+            // 自动调整大小
+            autoResizeNode(nodeId);
+        }
+
+        // 其他辅助函数
+        function autoResizeTextarea(nodeId) {
+            const nodeElement = document.querySelector(`#node-${nodeId}`);
+            const textarea = nodeElement.querySelector('textarea');
+            if (textarea) {
+                textarea.addEventListener('input', function() {
+                    this.style.height = 'auto';
+                    this.style.height = Math.max(100, this.scrollHeight) + 'px';
+                    
+                    const node = editor.getNodeFromId(nodeId);
+                    editor.updateNodeDataFromId(nodeId, { 
+                        content: this.value,
+                        height: Math.max(150, nodeElement.offsetHeight)
+                    });
+                });
+                
+                textarea.value = editor.getNodeFromId(nodeId).data.content || '';
+                textarea.style.height = 'auto';
+                textarea.style.height = Math.max(100, textarea.scrollHeight) + 'px';
+            }
+        }
+
+        function renderTodoNode(nodeId, items) {
+            const nodeElement = document.querySelector(`#node-${nodeId}`);
+            const todoList = nodeElement.querySelector('.todo-list');
+            if (!todoList) return;
+            
+            todoList.innerHTML = '';
+            items.forEach((item, index) => {
+                const todoItem = document.createElement('div');
+                todoItem.style.cssText = 'display: flex; align-items: center; margin: 5px 0;';
+                todoItem.innerHTML = `
+                    <input type="checkbox" ${item.completed ? 'checked' : ''} 
+                           onchange="updateTodoItem(${nodeId}, ${index}, this.checked)"
+                           style="margin-right: 10px;">
+                    <input type="text" value="${item.text}" 
+                           onchange="updateTodoText(${nodeId}, ${index}, this.value)"
+                           style="flex: 1; border: none; border-bottom: 1px solid #eee; padding: 5px;">
+                    <button onclick="removeTodoItem(${nodeId}, ${index})" 
+                            style="margin-left: 10px; background: #ff4757; color: white; border: none; border-radius: 3px; padding: 2px 8px; cursor: pointer;">×</button>
+                `;
+                todoList.appendChild(todoItem);
+            });
+        }
+
+        function renderTableNode(nodeId, data) {
+            const nodeElement = document.querySelector(`#node-${nodeId}`);
+            const table = nodeElement.querySelector('table tbody');
+            if (!table) return;
+            
+            table.innerHTML = '';
+            data.forEach((row, rowIndex) => {
+                const tr = document.createElement('tr');
+                row.forEach((cell, colIndex) => {
+                    const cellElement = rowIndex === 0 ? document.createElement('th') : document.createElement('td');
+                    cellElement.innerHTML = `<input type="text" value="${cell}" 
+                        onchange="updateTableCell(${nodeId}, ${rowIndex}, ${colIndex}, this.value)"
+                        style="width: 100%; border: none; padding: 5px;">`;
+                    tr.appendChild(cellElement);
+                });
+                table.appendChild(tr);
+            });
+        }
+
+        function autoResizeNode(nodeId) {
+            const nodeElement = document.querySelector(`#node-${nodeId}`);
+            const content = nodeElement.querySelector('.content');
+            if (content) {
+                const scrollHeight = content.scrollHeight;
+                const currentHeight = parseInt(nodeElement.style.height || '150');
+                if (scrollHeight > currentHeight - 50) {
+                    const newHeight = Math.max(150, scrollHeight + 50);
+                    nodeElement.style.height = newHeight + 'px';
+                    editor.updateNodeDataFromId(nodeId, { height: newHeight });
+                }
+            }
+        }
+
+        function autoFitNode(nodeId) {
+            const nodeElement = document.querySelector(`#node-${nodeId}`);
+            const content = nodeElement.querySelector('.content');
+            if (content) {
+                const scrollHeight = content.scrollHeight;
+                const newHeight = Math.max(150, scrollHeight + 50);
+                nodeElement.style.height = newHeight + 'px';
+                editor.updateNodeDataFromId(nodeId, { height: newHeight });
+            }
+        }
+
+        // 节点添加函数
+        function addNote() {
+            const nodeId = editor.addNode('note', 0, 0, 300, 150, 'note', { content: '新笔记内容...', width: 300, height: 150 }, 'note', true);
+            //editor.selectNode(nodeId);
+        }
+
+        function addTodo() {
+            const nodeId = editor.addNode('todo', 0, 0, 300, 200, 'todo', { items: [{text: '第一个待办', completed: false}], width: 350, height: 200},'todo',true);
+            //editor.selectNode(nodeId);
+        }
+
+        function addTable() {
+            const nodeId = editor.addNode('table', 0, 0, 400, 200, 'table', { data: [['列1', '列2'], ['数据1', '数据2']], width: 400, height: 200},'table',true);
+            //editor.selectNode(nodeId);
+        }
+
+        function addBlocksuite() {
+            const nodeId = editor.addNode('blocksuite', 0, 0, 400, 300, 'blocksuite', {blocksuiteContent: null, width: 450, height: 350},"blocksuite",true);
+            //editor.selectNode(nodeId);
+        }
+
+        // 数据持久化
+        function saveData() {
+            const data = {
+                drawflow: editor.export(),
+                timestamp: Date.now()
+            };
+            localStorage.setItem('drawflow-bseditor-data', JSON.stringify(data));
+            alert('数据已保存！');
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('drawflow-bseditor-data');
+            if (saved) {
+                const data = JSON.parse(saved);
+                editor.import(data.drawflow);
+                alert('数据已加载！');
+            } else {
+                alert('没有保存的数据！');
+            }
+        }
+
+        // 帮助提示
+        function toggleHelp() {
+            const tooltip = document.getElementById('help-tooltip');
+            tooltip.classList.toggle('show');
+            setTimeout(() => tooltip.classList.remove('show'), 5000);
+        }
+
+        // 初始化
+        editor.start();
+        registerNodeTypes();
+
+        // 加载示例数据
+        setTimeout(() => {
+            if (!localStorage.getItem('drawflow-bseditor-data')) {
+                addBlocksuite();
+            }
+        }, 500);
+    </script>
+</body>
+</html>
