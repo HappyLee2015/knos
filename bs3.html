@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>类重构版 BlockSuite 编辑器</title>
+    <style>
+        :root {
+            --primary-color: #007acc;
+            --hover-color: #e3f2fd;
+            --border-color: #e0e0e0;
+            --text-color: #333;
+            --light-gray: #f5f5f5;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .editor-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .editor-header {
+            padding: 20px 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .editor-title {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .collaboration-indicators {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .user-avatar:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.1);
+        }
+
+        .editor-toolbar {
+            padding: 16px 32px;
+            background: #fafafa;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            border-right: 1px solid var(--border-color);
+            padding-right: 12px;
+            margin-right: 12px;
+        }
+
+        .toolbar-group:last-child {
+            border-right: none;
+            margin-right: 0;
+            padding-right: 0;
+        }
+
+        .toolbar-btn {
+            padding: 10px 14px;
+            border: 1px solid transparent;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .toolbar-btn:hover {
+            background: var(--hover-color);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .toolbar-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .toolbar-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .editor-content {
+            padding: 32px;
+            min-height: 600px;
+            outline: none;
+            position: relative;
+        }
+
+        .block {
+            margin: 8px 0;
+            padding: 12px 16px;
+            border-radius: 12px;
+            transition: all 0.3s;
+            position: relative;
+            border: 2px solid transparent;
+        }
+
+        .block:hover {
+            background-color: var(--hover-color);
+            border-color: rgba(0,122,204,0.2);
+        }
+
+        .block.selected {
+            background-color: var(--hover-color);
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 16px rgba(0,122,204,0.15);
+        }
+
+        .block.dragging {
+            opacity: 0.6;
+            transform: rotate(3deg);
+        }
+
+        .block-handle {
+            position: absolute;
+            left: -40px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            cursor: grab;
+            opacity: 0;
+            transition: opacity 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.1);
+            border-radius: 4px;
+            color: #666;
+        }
+
+        .block:hover .block-handle {
+            opacity: 0.7;
+        }
+
+        .block-handle:active {
+            cursor: grabbing;
+        }
+
+        /* 表格样式 */
+        .table-block {
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .data-table tr:hover {
+            background: var(--hover-color);
+        }
+
+        .table-controls {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .table-btn {
+            padding: 6px 12px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        /* 看板样式 */
+        .kanban-block {
+            margin: 16px 0;
+        }
+
+        .kanban-board {
+            display: flex;
+            gap: 16px;
+            min-height: 300px;
+        }
+
+        .kanban-column {
+            flex: 1;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            min-height: 200px;
+        }
+
+        .kanban-column-header {
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .kanban-column.todo .kanban-column-header {
+            background: var(--warning-color);
+            color: #212529;
+        }
+
+        .kanban-column.doing .kanban-column-header {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .kanban-column.done .kanban-column-header {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .kanban-card {
+            background: white;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            cursor: move;
+            transition: all 0.2s;
+        }
+
+        .kanban-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .kanban-card.dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+        }
+
+        /* 文本块样式 */
+        .text-block {
+            font-size: 16px;
+            line-height: 1.7;
+            min-height: 28px;
+        }
+
+        .heading-1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin: 24px 0 12px 0;
+            color: #1a1a1a;
+        }
+
+        .heading-2 {
+            font-size: 28px;
+            font-weight: 600;
+            margin: 20px 0 10px 0;
+            color: #333;
+        }
+
+        .heading-3 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 16px 0 8px 0;
+            color: #444;
+        }
+
+        .bullet-list {
+            margin-left: 32px;
+            position: relative;
+        }
+
+        .bullet-list::before {
+            content: "";
+            position: absolute;
+            left: -20px;
+            top: 14px;
+            width: 8px;
+            height: 8px;
+            background: var(--primary-color);
+            border-radius: 50%;
+        }
+
+        .numbered-list {
+            margin-left: 32px;
+            position: relative;
+            counter-increment: list-counter;
+        }
+
+        .numbered-list::before {
+            content: counter(list-counter) ".";
+            position: absolute;
+            left: -24px;
+            top: 8px;
+            font-weight: 600;
+            color: var(--primary-color);
+            font-size: 16px;
+        }
+
+        .editor-content {
+            counter-reset: list-counter;
+        }
+
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: attr(data-language);
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+            background: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .code-content {
+            padding: 20px;
+            margin-top: 24px;
+        }
+
+        .quote-block {
+            border-left: 4px solid var(--primary-color);
+            padding: 16px 20px;
+            background: #f8f9fa;
+            font-style: italic;
+            color: #495057;
+            font-size: 16px;
+        }
+
+        .divider-block {
+            height: 2px;
+            background: linear-gradient(to right, transparent, var(--border-color), transparent);
+            margin: 24px 0;
+        }
+
+        .placeholder {
+            color: #999;
+            font-style: italic;
+        }
+
+        .status-bar {
+            padding: 16px 32px;
+            background: #fafafa;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .status-left {
+            display: flex;
+            gap: 20px;
+        }
+
+        .status-right {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .sync-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sync-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success-color);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .editor-container {
+                margin: 10px;
+                border-radius: 12px;
+            }
+            
+            .editor-toolbar {
+                padding: 12px 16px;
+            }
+            
+            .toolbar-btn {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+
+            .kanban-board {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-container">
+        <div class="editor-header">
+            <div class="editor-title">🏗️ 类重构版 BlockSuite 编辑器</div>
+            <div class="collaboration-indicators">
+                <div class="user-avatar" title="张三正在编辑">张</div>
+                <div class="user-avatar" title="李四正在查看">李</div>
+                <div class="user-avatar" title="王五正在查看">王</div>
+                <div class="user-avatar" title="赵六正在编辑">赵</div>
+            </div>
+        </div>
+
+        <div class="editor-toolbar">
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="editor.createBlock('paragraph')" title="段落">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5h18v2H3V5zm0 4h12v2H3V9zm0 4h18v2H3v-2zm0 4h12v2H3v-2z"/></svg>
+                    文本
+                </button>
+                <button class="toolbar-btn" onclick="editor.createBlock('heading-1')" title="标题1">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+                    H1
+                </button>
+                <button class="toolbar-btn" onclick="editor.createBlock('heading-2')" title="标题2">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+                    H2
+                </button>
+                <button class="toolbar-btn" onclick="editor.createBlock('heading-3')" title="标题3">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+                    H3
+                </button>
+            </div>
+            
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="editor.createBlock('bullet-list')" title="无序列表">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h2v2H4zm0 5h2v2H4zm0 5h2v2H4zm4-10h14v2H8zm0 5h14v2H8zm0 5h14v2H8z"/></svg>
+                </button>
+                <button class="toolbar-btn" onclick="editor.createBlock('numbered-list')" title="有序列表">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z"/></svg>
+                </button>
+                <button class="toolbar-btn" onclick="editor.createBlock('quote')" title="引用">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>
+                </button>
+            </div>
+            
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="editor.createBlock('code')" title="代码块">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+                </button>
+                <button class="toolbar-btn" onclick="editor.createBlock('divider')" title="分割线">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 7h2v2H3zm4 0h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2z"/></svg>
+                </button>
+            </div>
+
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="editor.createBlock('table')" title="插入表格">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3v18h18V3H3zm16 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
+                    表格
+                </button>
+                <button class="toolbar-btn" onclick="editor.createBlock('kanban')" title="插入看板">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                    看板
+                </button>
+            </div>
+            
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="editor.undo()" title="撤销">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+                </button>
+                <button class="toolbar-btn" onclick="editor.redo()" title="重做">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>
+                </button>
+                
+            </div>
+                        <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="editor.exportContent()" title="导出JSON">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                    </svg>
+                    导出
+                </button>
+            </div>
+        </div>
+
+        <div class="editor-content" id="editor">
+            <!-- 内容将通过JavaScript动态生成 -->
+        </div>
+
+        <div class="status-bar">
+            <div class="status-left">
+                <span>📊 块数: <span id="block-count">0</span></span>
+                <span>📝 字数: <span id="word-count">0</span></span>
+                <span>🔤 字符: <span id="char-count">0</span></span>
+            </div>
+            <div class="status-right">
+                <div class="sync-indicator">
+                    <div class="sync-dot"></div>
+                    <span>✅ 已同步</span>
+                </div>
+                <span id="last-saved">💾 最后保存: 刚刚</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== 基类：Block =====
+        class Block {
+            constructor(type, content = '') {
+                this.type = type;
+                this.content = content;
+                this.element = null;
+            }
+
+            createElement() {
+                const div = document.createElement('div');
+                div.className = `block ${this.type}-block`;
+                div.setAttribute('data-type', this.type);
+                div.draggable = true;
+                
+                const handle = document.createElement('div');
+                handle.className = 'block-handle';
+                handle.textContent = '⋮⋮';
+                
+                div.appendChild(handle);
+                return div;
+            }
+
+            render() {
+                this.element = this.createElement();
+                return this.element;
+            }
+
+            getTextContent() {
+                return this.content;
+            }
+
+            setTextContent(content) {
+                this.content = content;
+            }
+        }
+
+        // ===== 文本块类 =====
+        class TextBlock extends Block {
+            constructor(content = '') {
+                super('paragraph', content);
+            }
+
+            createElement() {
+                const element = super.createElement();
+                const textDiv = document.createElement('div');
+                textDiv.className = 'text-block';
+                textDiv.contentEditable = true;
+                textDiv.textContent = this.content || '点击输入文本...';
+                element.appendChild(textDiv);
+                return element;
+            }
+        }
+
+        // ===== 标题块类 =====
+        class HeadingBlock extends Block {
+            constructor(level, content = '') {
+                super(`heading-${level}`, content);
+                this.level = level;
+            }
+
+            createElement() {
+                const element = super.createElement();
+                const heading = document.createElement('div');
+                heading.className = `heading-${this.level}`;
+                heading.contentEditable = true;
+                heading.textContent = this.content || `标题 ${this.level}`;
+                element.appendChild(heading);
+                return element;
+            }
+        }
+
+        // ===== 列表块类 =====
+        class ListBlock extends Block {
+            constructor(type, content = '') {
+                super(type, content);
+            }
+
+            createElement() {
+                const element = super.createElement();
+                const listItem = document.createElement('div');
+                listItem.className = this.type;
+                listItem.contentEditable = true;
+                listItem.textContent = this.content || '列表项';
+                element.appendChild(listItem);
+                return element;
+            }
+        }
+
+        // ===== 引用块类 =====
+        class QuoteBlock extends Block {
+            constructor(content = '') {
+                super('quote', content);
+            }
+
+            createElement() {
+                const element = super.createElement();
+                const quote = document.createElement('div');
+                quote.className = 'quote-block';
+                quote.contentEditable = true;
+                quote.textContent = this.content || '引用文本...';
+                element.appendChild(quote);
+                return element;
+            }
+        }
+
+        // ===== 代码块类 =====
+        class CodeBlock extends Block {
+            constructor(content = '', language = 'javascript') {
+                super('code', content);
+                this.language = language;
+            }
+
+            createElement() {
+                const element = super.createElement();
+                element.setAttribute('data-language', this.language);
+                
+                const codeContent = document.createElement('div');
+                codeContent.className = 'code-content';
+                codeContent.contentEditable = true;
+                codeContent.textContent = this.content || '// 输入代码...';
+                
+                element.appendChild(codeContent);
+                return element;
+            }
+        }
+
+        // ===== 分割线块类 =====
+        class DividerBlock extends Block {
+            constructor() {
+                super('divider', '');
+            }
+
+            createElement() {
+                const element = super.createElement();
+                element.classList.add('divider-block');
+                return element;
+            }
+        }
+
+        // ===== 表格块类 =====
+        class TableBlock extends Block {
+            constructor(rows = 3, cols = 3) {
+                super('table', '');
+                this.rows = rows;
+                this.cols = cols;
+                this.data = this.generateDefaultData();
+            }
+
+            generateDefaultData() {
+                const data = [];
+                for (let i = 0; i < this.rows; i++) {
+                    data[i] = [];
+                    for (let j = 0; j < this.cols; j++) {
+                        data[i][j] = `单元格 ${i+1}-${j+1}`;
+                    }
+                }
+                return data;
+            }
+
+            createElement() {
+                const element = super.createElement();
+                element.classList.add('table-block');
+                
+                const controls = document.createElement('div');
+                controls.className = 'table-controls';
+                controls.innerHTML = `
+                    <button class="table-btn" onclick="editor.handleTableAction('addRow', this)">添加行</button>
+                    <button class="table-btn" onclick="editor.handleTableAction('addCol', this)">添加列</button>
+                    <button class="table-btn" onclick="editor.handleTableAction('removeRow', this)">删除行</button>
+                    <button class="table-btn" onclick="editor.handleTableAction('removeCol', this)">删除列</button>
+                `;
+                
+                const table = document.createElement('table');
+                table.className = 'data-table';
+                table.innerHTML = this.generateTableHTML();
+                
+                element.appendChild(controls);
+                element.appendChild(table);
+                
+                return element;
+            }
+
+            generateTableHTML() {
+                let html = '<thead><tr>';
+                for (let j = 0; j < this.cols; j++) {
+                    html += `<th contenteditable="true">${this.data[0]?.[j] || `列${j+1}`}</th>`;
+                }
+                html += '</tr></thead><tbody>';
+                
+                for (let i = 1; i < this.rows; i++) {
+                    html += '<tr>';
+                    for (let j = 0; j < this.cols; j++) {
+                        html += `<td contenteditable="true">${this.data[i]?.[j] || ''}</td>`;
+                    }
+                    html += '</tr>';
+                }
+                html += '</tbody>';
+                
+                return html;
+            }
+
+            addRow() {
+                this.rows++;
+                this.data.push(new Array(this.cols).fill(''));
+                return this.generateTableHTML();
+            }
+
+            addCol() {
+                this.cols++;
+                this.data.forEach(row => row.push(''));
+                return this.generateTableHTML();
+            }
+
+            removeRow() {
+                if (this.rows > 1) {
+                    this.rows--;
+                    this.data.pop();
+                    return this.generateTableHTML();
+                }
+                return null;
+            }
+
+            removeCol() {
+                if (this.cols > 1) {
+                    this.cols--;
+                    this.data.forEach(row => row.pop());
+                    return this.generateTableHTML();
+                }
+                return null;
+            }
+        }
+
+        // ===== 看板块类 =====
+        class KanbanBlock extends Block {
+            constructor() {
+                super('kanban', '');
+                this.columns = [
+                    { name: '待办', class: 'todo', cards: ['任务1', '任务2'] },
+                    { name: '进行中', class: 'doing', cards: ['任务3'] },
+                    { name: '已完成', class: 'done', cards: ['任务4'] }
+                ];
+            }
+
+            createElement() {
+                const element = super.createElement();
+                element.classList.add('kanban-block');
+                
+                const board = document.createElement('div');
+                board.className = 'kanban-board';
+                board.innerHTML = this.generateKanbanHTML();
+                
+                element.appendChild(board);
+                return element;
+            }
+
+            generateKanbanHTML() {
+                let html = '';
+                this.columns.forEach(col => {
+                    html += `
+                        <div class="kanban-column ${col.class}">
+                            <div class="kanban-column-header">${col.name}</div>
+                            <div class="kanban-cards">
+                                ${col.cards.map(card => `
+                                    <div class="kanban-card" draggable="true" contenteditable="true">${card}</div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                });
+                return html;
+            }
+        }
+
+        // ===== 工厂类：BlockFactory =====
+        class BlockFactory {
+            static create(type, content = '') {
+                switch(type) {
+                    case 'paragraph':
+                        return new TextBlock(content);
+                    case 'heading-1':
+                        return new HeadingBlock(1, content);
+                    case 'heading-2':
+                        return new HeadingBlock(2, content);
+                    case 'heading-3':
+                        return new HeadingBlock(3, content);
+                    case 'bullet-list':
+                        return new ListBlock('bullet-list', content);
+                    case 'numbered-list':
+                        return new ListBlock('numbered-list', content);
+                    case 'quote':
+                        return new QuoteBlock(content);
+                    case 'code':
+                        return new CodeBlock(content);
+                    case 'divider':
+                        return new DividerBlock();
+                    case 'table':
+                        return new TableBlock();
+                    case 'kanban':
+                        return new KanbanBlock();
+                    default:
+                        return new TextBlock(content);
+                }
+            }
+        }
+
+        // ===== 重构后的编辑器类 =====
+        class ClassBasedBlockSuite {
+            constructor(container) {
+                this.container = container;
+                this.blocks = [];
+                this.history = [];
+                this.historyIndex = -1;
+                this.draggedElement = null;
+                this.init();
+                this.loadInitialContent();
+            }
+
+            init() {
+                this.container.addEventListener('keydown', this.handleKeydown.bind(this));
+                this.container.addEventListener('click', this.handleClick.bind(this));
+                this.container.addEventListener('input', this.handleInput.bind(this));
+                this.container.addEventListener('dragover', this.handleDragOver.bind(this));
+                this.container.addEventListener('drop', this.handleDrop.bind(this));
+                
+                this.setupDragAndDrop();
+                this.saveState();
+                this.updateStats();
+            }
+
+            loadInitialContent() {
+                const initialBlocks = [
+                    { type: 'paragraph', content: '🏗️ 欢迎使用类重构版 BlockSuite 编辑器！所有块都已重构为类，提高代码复用性。' },
+                    { type: 'heading-1', content: '🔧 重构特性' },
+                    { type: 'bullet-list', content: '面向对象设计：每个块都是独立的类' },
+                    { type: 'bullet-list', content: '工厂模式：统一创建和管理块实例' },
+                    { type: 'bullet-list', content: '可扩展性：轻松添加新的块类型' },
+                    { type: 'bullet-list', content: '代码复用：减少重复代码，提高维护性' },
+                    { type: 'quote', content: '“类重构让代码更清晰，扩展更容易”' },
+                    { type: 'code', content: '// 创建新块示例\nconst block = BlockFactory.create("heading-1", "新标题");\neditor.addBlock(block);' }
+                ];
+
+                initialBlocks.forEach(blockData => {
+                    const block = BlockFactory.create(blockData.type, blockData.content);
+                    this.addBlock(block);
+                });
+            }
+
+            createBlock(type, content = '') {
+                const block = BlockFactory.create(type, content);
+                this.addBlock(block);
+                return block;
+            }
+
+            addBlock(block) {
+                const element = block.render();
+                this.blocks.push(block);
+                this.container.appendChild(element);
+                this.saveState();
+                this.updateStats();
+                return element;
+            }
+
+            insertBlockAfter(element, type, content = '') {
+                const block = BlockFactory.create(type, content);
+                const newElement = block.render();
+                
+                if (element && element.nextSibling) {
+                    element.parentNode.insertBefore(newElement, element.nextSibling);
+                } else {
+                    this.container.appendChild(newElement);
+                }
+                
+                this.blocks.splice(this.blocks.findIndex(b => b.element === element) + 1, 0, block);
+                this.saveState();
+                this.updateStats();
+                return newElement;
+            }
+
+            handleKeydown(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const currentBlock = e.target.closest('.block');
+                    if (currentBlock) {
+                        this.insertBlockAfter(currentBlock, 'paragraph');
+                    }
+                } else if (e.key === 'Backspace' && e.target.textContent === '') {
+                    e.preventDefault();
+                    const currentBlock = e.target.closest('.block');
+                    if (currentBlock && this.container.children.length > 1) {
+                        this.deleteBlock(currentBlock);
+                    }
+                }
+            }
+
+            handleClick(e) {
+                if (e.target.classList.contains('block') || e.target.closest('.block')) {
+                    this.selectBlock(e.target.closest('.block'));
+                }
+            }
+
+            handleInput(e) {
+                if (e.target.closest('.block')) {
+                    this.updateStats();
+                    this.saveState();
+                }
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                const afterElement = this.getDragAfterElement(e.clientY);
+                const draggable = document.querySelector('.dragging');
+                if (draggable && afterElement) {
+                    this.container.insertBefore(draggable, afterElement);
+                } else if (draggable) {
+                    this.container.appendChild(draggable);
+                }
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                this.saveState();
+                this.updateStats();
+            }
+
+            setupDragAndDrop() {
+                this.container.addEventListener('dragstart', (e) => {
+                    if (e.target.classList.contains('block')) {
+                        e.target.classList.add('dragging');
+                        this.draggedElement = e.target;
+                    }
+                });
+
+                this.container.addEventListener('dragend', (e) => {
+                    if (e.target.classList.contains('block')) {
+                        e.target.classList.remove('dragging');
+                        this.draggedElement = null;
+                    }
+                });
+            }
+
+            getDragAfterElement(y) {
+                const draggableElements = [...this.container.querySelectorAll('.block:not(.dragging)')];
+                
+                return draggableElements.reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    
+                    if (offset < 0 && offset > closest.offset) {
+                        return { offset: offset, element: child };
+                    } else {
+                        return closest;
+                    }
+                }, { offset: Number.NEGATIVE_INFINITY }).element;
+            }
+
+            selectBlock(element) {
+                document.querySelectorAll('.block').forEach(b => b.classList.remove('selected'));
+                if (element) {
+                    element.classList.add('selected');
+                }
+            }
+
+            deleteBlock(element) {
+                if (element && element.parentNode) {
+                    element.parentNode.removeChild(element);
+                    this.blocks = this.blocks.filter(b => b.element !== element);
+                    this.saveState();
+                    this.updateStats();
+                }
+            }
+
+            handleTableAction(action, button) {
+                const block = button.closest('.block');
+                const table = block.querySelector('.data-table');
+                const tableBlock = this.blocks.find(b => b.element === block);
+                
+                if (tableBlock && tableBlock instanceof TableBlock) {
+                    let newHTML = null;
+                    
+                    switch(action) {
+                        case 'addRow':
+                            newHTML = tableBlock.addRow();
+                            break;
+                        case 'addCol':
+                            newHTML = tableBlock.addCol();
+                            break;
+                        case 'removeRow':
+                            newHTML = tableBlock.removeRow();
+                            break;
+                        case 'removeCol':
+                            newHTML = tableBlock.removeCol();
+                            break;
+                    }
+                    
+                    if (newHTML) {
+                        table.innerHTML = newHTML;
+                        this.saveState();
+                        this.updateStats();
+                    }
+                }
+            }
+
+            saveState() {
+                const state = this.blocks.map(block => ({
+                    type: block.type,
+                    content: block.content
+                }));
+                
+                this.history = this.history.slice(0, this.historyIndex + 1);
+                this.history.push(JSON.stringify(state));
+                this.historyIndex++;
+                
+                if (this.history.length > 50) {
+                    this.history.shift();
+                    this.historyIndex--;
+                }
+            }
+
+            undo() {
+                if (this.historyIndex > 0) {
+                    this.historyIndex--;
+                    this.restoreState(JSON.parse(this.history[this.historyIndex]));
+                }
+            }
+
+            redo() {
+                if (this.historyIndex < this.history.length - 1) {
+                    this.historyIndex++;
+                    this.restoreState(JSON.parse(this.history[this.historyIndex]));
+                }
+            }
+
+            restoreState(state) {
+                this.container.innerHTML = '';
+                this.blocks = [];
+                
+                state.forEach(blockData => {
+                    const block = BlockFactory.create(blockData.type, blockData.content);
+                    this.addBlock(block);
+                });
+            }
+
+            updateStats() {
+                let text = '';
+                let blockCount = 0;
+                
+                this.container.querySelectorAll('.block').forEach(block => {
+                    blockCount++;
+                    const type = block.getAttribute('data-type');
+                    
+                    if (type === 'table') {
+                        const cells = block.querySelectorAll('td, th');
+                        cells.forEach(cell => text += cell.textContent + ' ');
+                    } else if (type === 'kanban') {
+                        const cards = block.querySelectorAll('.kanban-card');
+                        cards.forEach(card => text += card.textContent + ' ');
+                    } else {
+                        const content = block.textContent.replace('⋮⋮', '').trim();
+                        text += content + ' ';
+                    }
+                });
+                
+                const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+                const chars = text.length;
+                
+                document.getElementById('block-count').textContent = blockCount;
+                document.getElementById('word-count').textContent = words;
+                document.getElementById('char-count').textContent = chars;
+            }
+
+            exportContent() {
+                const content = {
+                    title: '类重构版 BlockSuite 文档',
+                    created: new Date().toISOString(),
+                    blocks: this.blocks.map(block => ({
+                        type: block.type,
+                        content: block.content
+                    }))
+                };
+                
+                const blob = new Blob([JSON.stringify(content, null, 2)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `blocksuite-class-based-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        // ===== 全局编辑器实例 =====
+        let editor;
+
+        // 全局函数（保持向后兼容）
+        function formatBlock(type) {
+            editor.createBlock(type);
+        }
+
+        function insertDivider() {
+            editor.createBlock('divider');
+        }
+
+        function insertTable() {
+            editor.createBlock('table');
+        }
+
+        function insertKanban() {
+            editor.createBlock('kanban');
+        }
+
+        function undo() {
+            editor.undo();
+        }
+
+        function redo() {
+            editor.redo();
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            editor = new ClassBasedBlockSuite(document.getElementById('editor'));
+            console.log('🏗️ 类重构版 BlockSuite 编辑器已初始化！');
+            console.log('📋 重构特性：');
+            console.log('   - 面向对象设计');
+            console.log('   - 工厂模式');
+            console.log('   - 可扩展架构');
+            console.log('   - 代码复用');
+        });
+    </script>
+</body>
+</html>
